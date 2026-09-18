@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ponte do Figma</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --borda: color-mix(in srgb, currentColor 18%, transparent);
+      }
+      body {
+        width: 380px;
+        margin: 0;
+        padding: 14px;
+        font: 13px/1.5 system-ui, sans-serif;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 14px;
+      }
+      p.ajuda {
+        margin: 0 0 12px;
+        opacity: 0.7;
+      }
+      label {
+        display: block;
+        margin-bottom: 10px;
+      }
+      span.rotulo {
+        display: block;
+        margin-bottom: 3px;
+        font-weight: 500;
+      }
+      input,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        border: 1px solid var(--borda);
+        border-radius: 6px;
+        background: transparent;
+        color: inherit;
+        font: 12px/1.4 ui-monospace, monospace;
+      }
+      textarea {
+        height: 78px;
+        resize: vertical;
+      }
+      button {
+        width: 100%;
+        padding: 8px;
+        border: 0;
+        border-radius: 6px;
+        background: #2563eb;
+        color: #fff;
+        font: 500 13px system-ui, sans-serif;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: progress;
+      }
+      #saida {
+        margin-top: 12px;
+      }
+      #saida:empty {
+        display: none;
+      }
+      .erro {
+        padding: 8px;
+        border-radius: 6px;
+        background: color-mix(in srgb, #dc2626 14%, transparent);
+      }
+      .imagem {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 6px 0;
+        border-top: 1px solid var(--borda);
+      }
+      .imagem img {
+        width: 40px;
+        height: 40px;
+        object-fit: contain;
+        background: repeating-conic-gradient(var(--borda) 0 25%, transparent 0 50%) 0 0 / 10px 10px;
+      }
+      .imagem code {
+        font-size: 11px;
+        opacity: 0.7;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Ponte do Figma</h1>
+    <p class="ajuda">Teste direto, sem o editor. Você precisa estar logado em figma.com neste navegador.</p>
+
+    <label>
+      <span class="rotulo">Chave do arquivo</span>
+      <input id="chave" placeholder="detectada na aba do Figma" spellcheck="false" />
+      <small id="dica"></small>
+    </label>
+
+    <label>
+      <span class="rotulo">Hashes das imagens, um por linha</span>
+      <textarea id="hashes" placeholder="40 dígitos hexadecimais cada" spellcheck="false"></textarea>
+    </label>
+
+    <button id="buscar">Buscar imagens</button>
+    <div id="saida"></div>
+
+    <script src="teste.js"></script>
+  </body>
+</html>
