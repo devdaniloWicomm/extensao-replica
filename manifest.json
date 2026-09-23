@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Gerador de Emails — ponte do Figma",
-  "version": "0.1.0",
-  "description": "Busca as imagens de uma colagem do Figma usando a sessão do próprio usuário, e entrega ao editor. Não lê, não copia e não guarda credencial.",
+  "version": "0.2.0",
+  "description": "Exporta as imagens de uma colagem do Figma pelo próprio Figma, na aba do arquivo. Não lê, não copia e não guarda credencial, e não altera o arquivo.",
   "background": {
     "service_worker": "fundo.js"
   },
@@ -18,7 +18,7 @@
     }
   ],
   "permissions": ["activeTab", "scripting", "tabs"],
-  "host_permissions": ["https://www.figma.com/*", "https://s3-alpha-sig.figma.com/*"],
+  "host_permissions": ["https://www.figma.com/*"],
   "action": {
     "default_popup": "teste.html",
     "default_title": "Ponte do Figma — teste"

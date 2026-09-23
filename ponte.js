@@ -35,8 +35,8 @@ window.addEventListener('message', evento => {
   const pedido =
     dados.tipo === 'ping'
       ? { tipo: 'ping' }
-      : dados.tipo === 'imagens'
-        ? { tipo: 'imagens', fileKey: dados.fileKey, hashes: dados.hashes }
+      : dados.tipo === 'exportar'
+        ? { tipo: 'exportar', fileKey: dados.fileKey, pedidos: dados.pedidos, escala: dados.escala }
         : null
 
   if (!pedido) return responder(dados.id, { ok: false, erro: `pedido desconhecido: ${dados.tipo}` })
