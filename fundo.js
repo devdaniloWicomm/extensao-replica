@@ -94,14 +94,25 @@ async function abaDoArquivo(fileKey) {
   const existente = abas.find(t => typeof t.url === 'string' && (t.url.includes(`/${fileKey}/`) || t.url.endsWith(`/${fileKey}`)))
   if (existente) return { id: existente.id, criada: false }
   const nova = await chrome.tabs.create({ url: `https://www.figma.com/design/${fileKey}`, active: false })
-  await new Promise(pronto => {
+  // Com teto: aba que nunca chega a 'complete' (login, rede) não pode prender a
+  // colagem nem deixar a aba aberta — ela é fechada e o erro vira linha de status.
+  const carregou = await new Promise(pronto => {
     const ouvir = (id, info) => {
       if (id !== nova.id || info.status !== 'complete') return
+      fim(true)
+    }
+    const teto = setTimeout(() => fim(false), ESPERA_API_MS)
+    const fim = ok => {
+      clearTimeout(teto)
       chrome.tabs.onUpdated.removeListener(ouvir)
-      pronto()
+      pronto(ok)
     }
     chrome.tabs.onUpdated.addListener(ouvir)
   })
+  if (!carregou) {
+    await chrome.tabs.remove(nova.id).catch(() => {})
+    throw new Error('o Figma não abriu o arquivo a tempo — abra o arquivo no figma.com e cole de novo')
+  }
   return { id: nova.id, criada: true }
 }
 
