@@ -91,7 +91,11 @@ async function esperarApiNaPagina(esperaMs) {
 /** A aba do arquivo da colagem. `criada` diz se fomos nós que abrimos, para não fechar a do usuário. */
 async function abaDoArquivo(fileKey) {
   const abas = await chrome.tabs.query({ url: ['https://www.figma.com/design/*', 'https://www.figma.com/file/*'] })
-  const existente = abas.find(t => typeof t.url === 'string' && (t.url.includes(`/${fileKey}/`) || t.url.endsWith(`/${fileKey}`)))
+  // Mesmo arquivo aberto em mais de uma aba: a adormecida (discarded/frozen) recusa
+  // o `executeScript`, então a acordada vem primeiro.
+  const existente = abas
+    .filter(t => typeof t.url === 'string' && (t.url.includes(`/${fileKey}/`) || t.url.endsWith(`/${fileKey}`)))
+    .sort((a, b) => Number(!!a.discarded || !!a.frozen) - Number(!!b.discarded || !!b.frozen))[0]
   if (existente) return { id: existente.id, criada: false }
   const nova = await chrome.tabs.create({ url: `https://www.figma.com/design/${fileKey}`, active: false })
   // Com teto: aba que nunca chega a 'complete' (login, rede) não pode prender a
@@ -117,8 +121,16 @@ async function abaDoArquivo(fileKey) {
 }
 
 async function rodarNaAba(abaId, func, args) {
-  const [resultado] = await chrome.scripting.executeScript({ target: { tabId: abaId }, world: 'MAIN', func, args })
-  return resultado?.result
+  try {
+    const [resultado] = await chrome.scripting.executeScript({ target: { tabId: abaId }, world: 'MAIN', func, args })
+    return resultado?.result
+  } catch (erro) {
+    // Aba em suspensão (o Edge congela aba parada em segundo plano): o Chrome responde
+    // como se faltasse permissão, e a mensagem crua manda o usuário mexer no lugar errado.
+    if (/Cannot access contents of the page|Frame with ID 0 was removed/.test(String(erro?.message)))
+      throw new Error('a aba do Figma está em suspensão — clique nela uma vez e cole de novo (no Edge: Configurações › Sistema e desempenho › "Nunca colocar estes sites em suspensão" › figma.com)')
+    throw erro
+  }
 }
 
 async function exportar({ fileKey, pedidos, escala }) {
