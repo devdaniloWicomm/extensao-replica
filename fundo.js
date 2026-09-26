@@ -17,6 +17,14 @@ const CHAVE_DE_ARQUIVO = /^[A-Za-z0-9]{10,64}$/
 /** Id da colada: `4183:2497`, ou filho de instância `4183:2569;316:4909`. */
 const ID_DE_NO = /^\d+:\d+(;\d+:\d+)*$/
 const ID_DE_FRAME = /^\d+:\d+$/
+/** Hash de imagem do Figma (`imageRef`): 40 hex. */
+const HASH_DE_IMAGEM = /^[0-9a-f]{40}$/
+/**
+ * `png` (padrão): o nó como o Figma desenha. `svg`: o mesmo, em vetor (espelho e web;
+ * email não lê SVG). `preenchimento`: o bitmap ORIGINAL do fill de imagem, pelo hash —
+ * frame com foto de fundo e filhos por cima, onde o PNG do nó traria os filhos juntos.
+ */
+const MODOS = new Set(['png', 'svg', 'preenchimento'])
 const MAX_PEDIDOS = 300
 const ESPERA_API_MS = 30_000
 
@@ -27,7 +35,9 @@ function pedidoValido(p) {
     typeof p.id === 'string' && ID_DE_NO.test(p.id) &&
     typeof p.raiz === 'string' && ID_DE_FRAME.test(p.raiz) &&
     Array.isArray(p.caminho) && p.caminho.length <= 30 &&
-    p.caminho.every(c => c && typeof c.nome === 'string' && c.nome.length <= 200 && Number.isInteger(c.indice) && c.indice >= 0)
+    p.caminho.every(c => c && typeof c.nome === 'string' && c.nome.length <= 200 && Number.isInteger(c.indice) && c.indice >= 0) &&
+    (p.modo === undefined || MODOS.has(p.modo)) &&
+    (p.modo !== 'preenchimento' || (typeof p.hash === 'string' && HASH_DE_IMAGEM.test(p.hash)))
   )
 }
 
@@ -64,9 +74,16 @@ async function exportarNaPagina(pedidos, escala) {
   const faltaram = []
   for (const p of pedidos) {
     try {
-      const n = await achar(p)
-      if (!n || typeof n.exportAsync !== 'function') { faltaram.push(p.chave); continue }
-      const bytes = await n.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: escala } })
+      let bytes
+      if (p.modo === 'preenchimento') {
+        const imagem = window.figma.getImageByHash(p.hash)
+        if (!imagem) { faltaram.push(p.chave); continue }
+        bytes = await imagem.getBytesAsync()
+      } else {
+        const n = await achar(p)
+        if (!n || typeof n.exportAsync !== 'function') { faltaram.push(p.chave); continue }
+        bytes = await n.exportAsync(p.modo === 'svg' ? { format: 'SVG' } : { format: 'PNG', constraint: { type: 'SCALE', value: escala } })
+      }
       // `String.fromCharCode(...bytes)` de uma vez estoura a pilha em imagem grande.
       let texto = ''
       for (let i = 0; i < bytes.length; i += 0x8000) texto += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000))
