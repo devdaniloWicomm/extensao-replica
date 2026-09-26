@@ -150,7 +150,8 @@ async function abaDoArquivo(fileKey) {
     // Recarregar troca o id da aba (medido), então ela é procurada de novo pela URL.
     if (existente.discarded) {
       await chrome.tabs.reload(existente.id).catch(() => {})
-      const fim = Date.now() + ESPERA_API_MS
+      // Arquivo pesado demora a reabrir: medido > 30 s na home de 10 mil px.
+      const fim = Date.now() + 3 * ESPERA_API_MS
       while (Date.now() < fim) {
         await new Promise(r => setTimeout(r, 500))
         const viva = (await chrome.tabs.query({ url: ['https://www.figma.com/design/*', 'https://www.figma.com/file/*'] }))
