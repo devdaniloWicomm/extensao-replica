@@ -105,21 +105,11 @@ async function esperarApiNaPagina(esperaMs) {
   return false
 }
 
-/** A aba do arquivo da colagem. `criada` diz se fomos nós que abrimos, para não fechar a do usuário. */
-async function abaDoArquivo(fileKey) {
-  const abas = await chrome.tabs.query({ url: ['https://www.figma.com/design/*', 'https://www.figma.com/file/*'] })
-  // Mesmo arquivo aberto em mais de uma aba: a adormecida (discarded/frozen) recusa
-  // o `executeScript`, então a acordada vem primeiro.
-  const existente = abas
-    .filter(t => typeof t.url === 'string' && (t.url.includes(`/${fileKey}/`) || t.url.endsWith(`/${fileKey}`)))
-    .sort((a, b) => Number(!!a.discarded || !!a.frozen) - Number(!!b.discarded || !!b.frozen))[0]
-  if (existente) return { id: existente.id, criada: false }
-  const nova = await chrome.tabs.create({ url: `https://www.figma.com/design/${fileKey}`, active: false })
-  // Com teto: aba que nunca chega a 'complete' (login, rede) não pode prender a
-  // colagem nem deixar a aba aberta — ela é fechada e o erro vira linha de status.
-  const carregou = await new Promise(pronto => {
+/** Espera a aba chegar a 'complete', com teto. */
+function carregada(abaId) {
+  return new Promise(pronto => {
     const ouvir = (id, info) => {
-      if (id !== nova.id || info.status !== 'complete') return
+      if (id !== abaId || info.status !== 'complete') return
       fim(true)
     }
     const teto = setTimeout(() => fim(false), ESPERA_API_MS)
@@ -130,7 +120,29 @@ async function abaDoArquivo(fileKey) {
     }
     chrome.tabs.onUpdated.addListener(ouvir)
   })
-  if (!carregou) {
+}
+
+/** A aba do arquivo da colagem. `criada` diz se fomos nós que abrimos, para não fechar a do usuário. */
+async function abaDoArquivo(fileKey) {
+  const abas = await chrome.tabs.query({ url: ['https://www.figma.com/design/*', 'https://www.figma.com/file/*'] })
+  // Mesmo arquivo aberto em mais de uma aba: a adormecida (discarded/frozen) recusa
+  // o `executeScript`, então a acordada vem primeiro.
+  const existente = abas
+    .filter(t => typeof t.url === 'string' && (t.url.includes(`/${fileKey}/`) || t.url.endsWith(`/${fileKey}`)))
+    .sort((a, b) => Number(!!a.discarded || !!a.frozen) - Number(!!b.discarded || !!b.frozen))[0]
+  if (existente) {
+    // Descartada pelo Chrome (Memory Saver): não roda script até recarregar.
+    if (existente.discarded) {
+      const pronta = carregada(existente.id)
+      await chrome.tabs.reload(existente.id)
+      if (!(await pronta)) throw new Error('o Figma não reabriu o arquivo a tempo — abra o arquivo no figma.com e cole de novo')
+    }
+    return { id: existente.id, criada: false }
+  }
+  const nova = await chrome.tabs.create({ url: `https://www.figma.com/design/${fileKey}`, active: false })
+  // Com teto: aba que nunca chega a 'complete' (login, rede) não pode prender a
+  // colagem nem deixar a aba aberta — ela é fechada e o erro vira linha de status.
+  if (!(await carregada(nova.id))) {
     await chrome.tabs.remove(nova.id).catch(() => {})
     throw new Error('o Figma não abriu o arquivo a tempo — abra o arquivo no figma.com e cole de novo')
   }
@@ -158,6 +170,9 @@ async function exportar({ fileKey, pedidos, escala }) {
   if (![1, 2, 3].includes(escala)) throw new Error('escala inválida')
 
   const aba = await abaDoArquivo(fileKey)
+  // Aba do Figma em segundo plano com o export pesando: o Memory Saver do Chrome a
+  // descartava no meio (medido: recarregou com outro id, e o lote inteiro falhou).
+  await chrome.tabs.update(aba.id, { autoDiscardable: false }).catch(() => {})
   try {
     const pronta = await rodarNaAba(aba.id, esperarApiNaPagina, [ESPERA_API_MS])
     if (!pronta) throw new Error('o Figma não abriu o arquivo nesta aba a tempo — abra o arquivo no figma.com e cole de novo')
@@ -167,6 +182,7 @@ async function exportar({ fileKey, pedidos, escala }) {
     return { imagens: saida.imagens ?? {}, faltaram: saida.faltaram ?? [] }
   } finally {
     if (aba.criada) await chrome.tabs.remove(aba.id).catch(() => {})
+    else await chrome.tabs.update(aba.id, { autoDiscardable: true }).catch(() => {})
   }
 }
 
