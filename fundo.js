@@ -70,6 +70,18 @@ async function exportarNaPagina(pedidos, escala) {
     }
     return n
   }
+  const baixadas = new Set()
+  const baixarFotos = async n => {
+    const nos = [n, ...(typeof n.findAll === 'function' ? n.findAll(() => true) : [])]
+    for (const x of nos) {
+      if (!Array.isArray(x.fills)) continue
+      for (const f of x.fills) {
+        if (f.type !== 'IMAGE' || !f.imageHash || baixadas.has(f.imageHash)) continue
+        baixadas.add(f.imageHash)
+        try { await window.figma.getImageByHash(f.imageHash)?.getBytesAsync() } catch {}
+      }
+    }
+  }
   const imagens = {}
   const faltaram = []
   for (const p of pedidos) {
@@ -82,6 +94,9 @@ async function exportarNaPagina(pedidos, escala) {
       } else {
         const n = await achar(p)
         if (!n || typeof n.exportAsync !== 'function') { faltaram.push(p.chave); continue }
+        // Aba recém-aberta: foto que ainda não baixou sai pintada com a cor média dela
+        // (medido: 446x500 de um marrom só). Baixar os bytes antes garante a foto.
+        await baixarFotos(n)
         bytes = await n.exportAsync(p.modo === 'svg' ? { format: 'SVG' } : { format: 'PNG', constraint: { type: 'SCALE', value: escala } })
       }
       // `String.fromCharCode(...bytes)` de uma vez estoura a pilha em imagem grande.
