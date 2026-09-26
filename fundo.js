@@ -132,10 +132,17 @@ async function abaDoArquivo(fileKey) {
     .sort((a, b) => Number(!!a.discarded || !!a.frozen) - Number(!!b.discarded || !!b.frozen))[0]
   if (existente) {
     // Descartada pelo Chrome (Memory Saver): não roda script até recarregar.
+    // Recarregar troca o id da aba (medido), então ela é procurada de novo pela URL.
     if (existente.discarded) {
-      const pronta = carregada(existente.id)
-      await chrome.tabs.reload(existente.id)
-      if (!(await pronta)) throw new Error('o Figma não reabriu o arquivo a tempo — abra o arquivo no figma.com e cole de novo')
+      await chrome.tabs.reload(existente.id).catch(() => {})
+      const fim = Date.now() + ESPERA_API_MS
+      while (Date.now() < fim) {
+        await new Promise(r => setTimeout(r, 500))
+        const viva = (await chrome.tabs.query({ url: ['https://www.figma.com/design/*', 'https://www.figma.com/file/*'] }))
+          .find(t => typeof t.url === 'string' && t.url.includes(`/${fileKey}`) && !t.discarded && t.status === 'complete')
+        if (viva) return { id: viva.id, criada: false }
+      }
+      throw new Error('o Figma não reabriu o arquivo a tempo — abra o arquivo no figma.com e cole de novo')
     }
     return { id: existente.id, criada: false }
   }
