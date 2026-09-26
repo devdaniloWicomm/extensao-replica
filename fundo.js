@@ -170,9 +170,13 @@ async function exportar({ fileKey, pedidos, escala }) {
   if (![1, 2, 3].includes(escala)) throw new Error('escala inválida')
 
   const aba = await abaDoArquivo(fileKey)
-  // Aba do Figma em segundo plano com o export pesando: o Memory Saver do Chrome a
-  // descartava no meio (medido: recarregou com outro id, e o lote inteiro falhou).
+  // Aba do Figma em segundo plano: o Chrome a congela (nenhum script roda, o pedido
+  // morre como "suspensão") ou o Memory Saver a descarta no meio do export (medido:
+  // voltou com outro id). À frente durante o export, e a aba de antes volta no fim.
   await chrome.tabs.update(aba.id, { autoDiscardable: false }).catch(() => {})
+  const info = await chrome.tabs.get(aba.id).catch(() => null)
+  const antes = info && !info.active ? (await chrome.tabs.query({ active: true, windowId: info.windowId }))[0] : null
+  if (antes) await chrome.tabs.update(aba.id, { active: true }).catch(() => {})
   try {
     const pronta = await rodarNaAba(aba.id, esperarApiNaPagina, [ESPERA_API_MS])
     if (!pronta) throw new Error('o Figma não abriu o arquivo nesta aba a tempo — abra o arquivo no figma.com e cole de novo')
@@ -183,6 +187,7 @@ async function exportar({ fileKey, pedidos, escala }) {
   } finally {
     if (aba.criada) await chrome.tabs.remove(aba.id).catch(() => {})
     else await chrome.tabs.update(aba.id, { autoDiscardable: true }).catch(() => {})
+    if (antes) await chrome.tabs.update(antes.id, { active: true }).catch(() => {})
   }
 }
 
