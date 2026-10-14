@@ -27,6 +27,8 @@ const HASH_DE_IMAGEM = /^[0-9a-f]{40}$/
 const MODOS = new Set(['png', 'svg', 'preenchimento'])
 const MAX_PEDIDOS = 300
 const ESPERA_API_MS = 30_000
+const TETO_DA_RESPOSTA = 24 * 1024 * 1024
+const TETO_DE_UMA = 48 * 1024 * 1024
 
 function pedidoValido(p) {
   return (
@@ -53,7 +55,7 @@ function pedidoValido(p) {
  *    Entre irmãos de mesmo nome vale o `indice`, contando só os visíveis, que é o
  *    que a colada também conta.
  */
-async function exportarNaPagina(pedidos, escala) {
+async function exportarNaPagina(pedidos, escala, teto, tetoDeUma) {
   if (!window.figma || typeof window.figma.getNodeByIdAsync !== 'function') return { erro: 'sem-api' }
   const porId = async id => {
     try { return await window.figma.getNodeByIdAsync(id) } catch { return null }
@@ -84,7 +86,14 @@ async function exportarNaPagina(pedidos, escala) {
   }
   const imagens = {}
   const faltaram = []
-  for (const p of pedidos) {
+  const restantes = []
+  let usado = 0
+  for (let i = 0; i < pedidos.length; i++) {
+    const p = pedidos[i]
+    if (usado >= teto) {
+      restantes.push(...pedidos.slice(i).map(x => x.chave))
+      break
+    }
     try {
       let bytes
       if (p.modo === 'preenchimento') {
@@ -101,13 +110,20 @@ async function exportarNaPagina(pedidos, escala) {
       }
       // `String.fromCharCode(...bytes)` de uma vez estoura a pilha em imagem grande.
       let texto = ''
-      for (let i = 0; i < bytes.length; i += 0x8000) texto += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000))
-      imagens[p.chave] = btoa(texto)
+      for (let k = 0; k < bytes.length; k += 0x8000) texto += String.fromCharCode.apply(null, bytes.subarray(k, k + 0x8000))
+      const b64 = btoa(texto)
+      if (b64.length > tetoDeUma) { faltaram.push(p.chave); continue }
+      if (usado > 0 && usado + b64.length > teto) {
+        restantes.push(...pedidos.slice(i).map(x => x.chave))
+        break
+      }
+      imagens[p.chave] = b64
+      usado += b64.length
     } catch {
       faltaram.push(p.chave)
     }
   }
-  return { imagens, faltaram }
+  return { imagens, faltaram, restantes }
 }
 
 /** Roda na página: espera o editor do Figma expor `window.figma` (aba recém-aberta). */
@@ -203,10 +219,10 @@ async function exportar({ fileKey, pedidos, escala }) {
   try {
     const pronta = await rodarNaAba(aba.id, esperarApiNaPagina, [ESPERA_API_MS])
     if (!pronta) throw new Error('o Figma não abriu o arquivo nesta aba a tempo — abra o arquivo no figma.com e cole de novo')
-    const saida = await rodarNaAba(aba.id, exportarNaPagina, [pedidos, escala])
+    const saida = await rodarNaAba(aba.id, exportarNaPagina, [pedidos, escala, TETO_DA_RESPOSTA, TETO_DE_UMA])
     if (!saida) throw new Error('não consegui rodar dentro da página do Figma')
     if (saida.erro === 'sem-api') throw new Error('a página do Figma não expôs a API — abra o arquivo no figma.com e cole de novo')
-    return { imagens: saida.imagens ?? {}, faltaram: saida.faltaram ?? [] }
+    return { imagens: saida.imagens ?? {}, faltaram: saida.faltaram ?? [], restantes: saida.restantes ?? [] }
   } finally {
     if (aba.criada) await chrome.tabs.remove(aba.id).catch(() => {})
     else await chrome.tabs.update(aba.id, { autoDiscardable: true }).catch(() => {})

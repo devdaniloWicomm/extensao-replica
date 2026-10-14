@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gerador de Emails — ponte do Figma",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Exporta as imagens de uma colagem do Figma pelo próprio Figma, na aba do arquivo. Não lê, não copia e não guarda credencial, e não altera o arquivo.",
   "background": {
     "service_worker": "fundo.js"
